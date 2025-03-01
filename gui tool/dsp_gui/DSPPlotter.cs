@@ -280,7 +280,7 @@ namespace dsp_gui
 						
 		
 			for (int x=0; x<700; x++) {
-				double w02 = 2.0f*Math.PI*GetFrequencyByX(x, 700)/48000.0f;
+				double w02 = 2.0f*Math.PI*GetFrequencyByX(x, 700)/44100.0f;
 				
 				for (int channel=0; channel<4; channel++) {
 				
@@ -335,7 +335,7 @@ namespace dsp_gui
 			}
 
 			double fc = (double) frequency;
-			double fs = 48000.0f;
+			double fs = 44100.0f;
 			double k = Math.Tan(pi*(fc/fs));
 			double qf=((double)q)/10.0f;
 			double norm = 1.0f/(1.0f+k/qf+k*k);
@@ -405,7 +405,7 @@ namespace dsp_gui
 		}
 
 		double fc = (double) frequency;
-		double fs = 48000.0f;
+		double fs = 44100.0f;
 		
 		double k = Math.Tan(pi*(fc/fs));
 		double qf=((double)q)/10.0f;
@@ -474,7 +474,7 @@ namespace dsp_gui
 		}
 	
 		double fc = (double) frequency;
-		double fs = 48000.0f;
+		double fs = 44100.0f;
 		double sqrt2 = 1.41421356f;
 		double k = Math.Tan(pi*(fc/fs));
 		double norm=0.0f, a0=0.0f, a1=0.0f, a2=0.0f, b1=0.0f, b2=0.0f;

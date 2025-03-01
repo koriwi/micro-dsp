@@ -1,4 +1,4 @@
-idf_component_register(SRCS "bt_app_av.c"
+idf_component_register(SRCS 
                             "bt_app_core.c"
                             "main.c"
                             "dsp.c"                 
@@ -7,7 +7,5 @@ idf_component_register(SRCS "bt_app_av.c"
 							"dsps_mulc_f32_ae32.S"
 							"dsps_add_f32_ae32.S"
 							"server.c"
-							"sysmgmt.c"
 							"ir_parser_rmt_nec.c"
-							"MA120x0.c"
                     INCLUDE_DIRS ".")
