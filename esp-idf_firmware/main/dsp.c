@@ -81,12 +81,10 @@ float dynbass_gainspeed = 0.0f;
 
 // input buffers
 // float inputbuff[3][64];
-float left_buf[64];
-float right_buf[64];
-float mono_buf[64];
-
-// pingbong buffers
-float ftemp[4][2][64];
+float left_buf[1024 / 2];
+float right_buf[1024 / 2];
+float mono_buf[1024 / 2];
+float *inputbuff[2] = {left_buf, right_buf};
 
 float polate(float ins, float *delay) {
 
@@ -95,94 +93,25 @@ float polate(float ins, float *delay) {
   return outval;
 }
 
-void DoDSP(signed long *data, size_t item_size, float rampupgain) {
+void DoDSP(int16_t *data, size_t item_size, float rampupgain) {
+  size_t sample_count = item_size / sizeof(int16_t) / 2;
 
-  int y = 0;
-  for (int i = 0; i < item_size / 4; i = i + 2) {
-    left_buf[y] = (float)data[i];
-    right_buf[y] = (float)data[i + 1];
-    y++;
+  for (int i = 0; i < sample_count; i++) {
+    left_buf[i] = (float)data[i * 2] / 32768.0f;
+    right_buf[i] = (float)data[i * 2 + 1] / 32768.0f;
   }
 
   float volume = master_volume * rampupgain;
-
-  dsps_mulc_f32_ae32(left_buf, left_buf, y, volume, 1, 1);
-  dsps_mulc_f32_ae32(right_buf, right_buf, y, volume, 1, 1);
-
-  // do bassenhance before dynbass
+  dsps_mulc_f32_ae32(left_buf, left_buf, sample_count, volume, 1, 1);
+  dsps_mulc_f32_ae32(right_buf, right_buf, sample_count, volume, 1, 1);
 
   // make sum signal
-  dsps_add_f32_ae32(left_buf, right_buf, mono_buf, y, 1, 1, 1);
-  dsps_mulc_f32_ae32(mono_buf, mono_buf, y, 0.5f, 1, 1);
-
-  // do bass enhancement
-  dsps_biquad_f32_ae32(mono_buf, bass_enhance_buff[0], y, &bass_enhance_lp[0],
-                       &bass_enhance_lp_del[0]);
-
-  // for (int i=0; i<item_size/4; i++) {
-  for (int i = 0; i < y; i++) {
-    if (bass_enhance_buff[0][i] < 0.0f)
-      bass_enhance_buff[0][i] = 0.0f;
-  }
-  dsps_biquad_f32_ae32(bass_enhance_buff[0], bass_enhance_buff[1], y,
-                       &bass_enhance_hp[0], &bass_enhance_hp_del[0]);
-  dsps_biquad_f32_ae32(bass_enhance_buff[1], bass_enhance_buff[0], y,
-                       &bass_enhance_lp[5], &bass_enhance_lp_del[2]);
-  dsps_mulc_f32_ae32(bass_enhance_buff[0], bass_enhance_buff[0], y,
-                     bass_enhance_gain, 1, 1);
-
-  if (settings.global_bypass[0] == 0) {
-    dsps_add_f32_ae32(left_buf, bass_enhance_buff[0], left_buf, y, 1, 1, 1);
-    dsps_add_f32_ae32(right_buf, bass_enhance_buff[0], right_buf, y, 1, 1, 1);
-    dsps_add_f32_ae32(mono_buf, bass_enhance_buff[0], mono_buf, y, 1, 1, 1);
-  }
-
-  // do dynbass
-  // todo: do dynbass configurable and check with bass_enhancement to do before
-  // dynbass
-
-  dsps_biquad_f32_ae32(mono_buf, dyn_bass_hp_buffer, y, &dyn_bass_biquads[5],
-                       &dyn_bass_biquads_del[2]);
-  float t = 0.0f;
-  for (int i = 0; i < y; i++) {
-    t = dyn_bass_hp_buffer[i];
-    if (t > dynbass_peak_temp)
-      dynbass_peak_temp = t;
-  }
-
-  dynbass_peak_counter++;
-  if (dynbass_peak_counter >= dynbass_watchtime) {
-    dynbass_peak_counter = 0;
-    dynbass_peak = dynbass_peak_temp;
-    dynbass_peak_temp = 0.0f;
-  }
-
-  float desired_gain =
-      (dynbass_threshold / dynbass_peak) * dynbass_desired_gain;
-
-  if (desired_gain > dynbass_desired_gain)
-    desired_gain = dynbass_desired_gain;
-
-  if (desired_gain == 0.0f)
-    dynbass_gain = 0.0f;
-  else if (dynbass_gain < desired_gain)
-    dynbass_gain += dynbass_gainspeed;
-  else if (dynbass_gain > desired_gain && dynbass_gain > dynbass_gainspeed)
-    dynbass_gain -= dynbass_gainspeed;
-
-  dsps_biquad_f32_ae32(mono_buf, dyn_bass_buffer, y, &dyn_bass_biquads[0],
-                       &dyn_bass_biquads_del[0]);
-  dsps_mulc_f32_ae32(dyn_bass_buffer, dyn_bass_buffer, y, dynbass_gain, 1, 1);
-
-  if (settings.global_bypass[1] == 0) {
-    dsps_add_f32_ae32(left_buf, dyn_bass_buffer, left_buf, y, 1, 1, 1);
-    dsps_add_f32_ae32(right_buf, dyn_bass_buffer, right_buf, y, 1, 1, 1);
-    dsps_add_f32_ae32(mono_buf, dyn_bass_buffer, mono_buf, y, 1, 1, 1);
-  }
+  dsps_add_f32_ae32(left_buf, right_buf, mono_buf, sample_count, 1, 1, 1);
+  dsps_mulc_f32_ae32(mono_buf, mono_buf, sample_count, 0.5f, 1, 1);
 
   // do normal filters now
-  for (int i = 0; i < 4; i++) {
-
+  for (int i = 0; i < 2; i++) {
+    float *buf = inputbuff[settings.sourceselect[i]];
     float lp_new[10], hp_new[10], eq_new[25];
     for (int h = 0; h < 25; h++) {
       if (h < 10) {
@@ -194,158 +123,131 @@ void DoDSP(signed long *data, size_t item_size, float rampupgain) {
 
     // do lowpassfilters ch0
     if (settings.channel_bypass[i][0] == 0) {
-      dsps_biquad_f32_ae32(inputbuff[settings.sourceselect[i]], ftemp[i][0], y,
-                           &lp_new[0], &iir_del_lp[i][0]);
-      dsps_biquad_f32_ae32(ftemp[i][0], ftemp[i][1], y, &lp_new[5],
+      dsps_biquad_f32_ae32(buf, buf, sample_count, &lp_new[0],
+                           &iir_del_lp[i][0]);
+      dsps_biquad_f32_ae32(buf, buf, sample_count, &lp_new[5],
                            &iir_del_lp[i][2]);
-    } else {
-      for (int t = 0; t < y; t++) {
-        ftemp[i][1][t] = inputbuff[settings.sourceselect[i]][t];
-      }
     }
-
     // do highpassfilters ch0
     if (settings.channel_bypass[i][1] == 0) {
-      dsps_biquad_f32_ae32(ftemp[i][1], ftemp[i][0], y, &hp_new[0],
+      dsps_biquad_f32_ae32(buf, buf, sample_count, &hp_new[0],
                            &iir_del_hp[i][0]);
-      dsps_biquad_f32_ae32(ftemp[i][0], ftemp[i][1], y, &hp_new[5],
+      dsps_biquad_f32_ae32(buf, buf, sample_count, &hp_new[5],
                            &iir_del_hp[i][2]);
-    } else {
-      // nothing todo -> buffer will stay ftemp[i][1]...
     }
-
     // do eq left
 
     if (settings.channel_bypass[i][2] == 0) {
-      dsps_biquad_f32_ae32(ftemp[i][1], ftemp[i][0], y, &eq_new[0],
+      dsps_biquad_f32_ae32(buf, buf, sample_count, &eq_new[0],
                            &iir_del_eq[i][0]);
-    } else {
-      for (int t = 0; t < y; t++) {
-        ftemp[i][0][t] = ftemp[i][1][t];
-      }
     }
-
     if (settings.channel_bypass[i][3] == 0) {
-      dsps_biquad_f32_ae32(ftemp[i][0], ftemp[i][1], y, &eq_new[5],
+      dsps_biquad_f32_ae32(buf, buf, sample_count, &eq_new[5],
                            &iir_del_eq[i][2]);
-    } else {
-      for (int t = 0; t < y; t++) {
-        ftemp[i][1][t] = ftemp[i][0][t];
-      }
     }
-
     if (settings.channel_bypass[i][4] == 0) {
-      dsps_biquad_f32_ae32(ftemp[i][1], ftemp[i][0], y, &eq_new[10],
+      dsps_biquad_f32_ae32(buf, buf, sample_count, &eq_new[10],
                            &iir_del_eq[i][4]);
-    } else {
-      for (int t = 0; t < y; t++) {
-        ftemp[i][0][t] = ftemp[i][1][t];
-      }
     }
-
     if (settings.channel_bypass[i][5] == 0) {
-      dsps_biquad_f32_ae32(ftemp[i][0], ftemp[i][1], y, &eq_new[15],
+      dsps_biquad_f32_ae32(buf, buf, sample_count, &eq_new[15],
                            &iir_del_eq[i][6]);
-    } else {
-      for (int t = 0; t < y; t++) {
-        ftemp[i][1][t] = ftemp[i][0][t];
-      }
     }
-
     if (settings.channel_bypass[i][6] == 0) {
-      dsps_biquad_f32_ae32(ftemp[i][1], ftemp[i][0], y, &eq_new[20],
+      dsps_biquad_f32_ae32(buf, buf, sample_count, &eq_new[20],
                            &iir_del_eq[i][8]);
-    } else {
-      for (int t = 0; t < y; t++) {
-        ftemp[i][0][t] = ftemp[i][1][t];
-      }
     }
-
     // gain mute and polarity
     float gain = channel_gains[i];
     if (settings.mute[i] == 1)
       gain *= 0.0f;
     if (settings.polarity[i] == 1)
       gain *= -1.0f;
-    dsps_mulc_f32_ae32(ftemp[i][0], ftemp[i][1], y, gain, 1, 1);
+    dsps_mulc_f32_ae32(buf, buf, sample_count, gain, 1, 1);
   }
 
-  float chann_abs[4];
+  // float chann_abs[4];
+  //
+  // // do peak detect and limiter start
+  // for (int channel = 0; channel < 2; channel++) {
+  //
+  //   for (int i = 0; i < y; i++) {
+  //
+  //     chann_abs[channel] = fabsf(ftemp[channel][1][i]);
+  //
+  //     if (chann_abs[channel] > peak_detect_temp[channel])
+  //       peak_detect_temp[channel] = chann_abs[channel];
+  //
+  //     if (chann_abs[channel] > limiter_threshold[channel]) {
+  //
+  //       float gainnew = limiter_threshold[channel] / chann_abs[channel];
+  //       limiter_timeout[channel] = settings.par_limiter_release[channel];
+  //
+  //       if (gainnew < limiter_gains[channel]) {
+  //         limiter_gains[channel] = gainnew;
+  //         limiter_release_gain[channel] =
+  //             (1.0f - gainnew) /
+  //             ((float)settings.par_limiter_release[channel] / 2);
+  //       }
+  //     }
+  //   }
+  // }
+  //
+  // peak_counter++;
+  // if (peak_counter == 70) {
+  //
+  //   for (int i = 0; i < 2; i++) {
+  //     peak_detect[i] = peak_detect_temp[i];
+  //     peak_detect_temp[i] = 0.0f;
+  //   }
+  //
+  //   peak_counter = 0;
+  // }
+  //
+  // // do limiter
+  //
+  // for (int i = 0; i < 2; i++) {
+  //
+  //   if (limiter_timeout[i] > 0) {
+  //
+  //     dsps_mulc_f32_ae32(ftemp[i][1], ftemp[i][1], sample_count,
+  //                        limiter_gains[i], 1, 1);
+  //     limiter_timeout[i]--;
+  //     if (limiter_timeout[i] < settings.par_limiter_release[i] / 2)
+  //       limiter_gains[i] += limiter_release_gain[i];
+  //     // for (int x=0; x<y;x++) { ftemp[i][1][x] = ftemp[i][0][x];}
+  //   } else {
+  //     limiter_gains[i] = 1.0f;
+  //   }
+  // }
+  //
+  // y = 0;
 
-  // do peak detect and limiter start
-  for (int channel = 0; channel < 4; channel++) {
+  // for (int i = 0; i < item_size / 4; i = i + 2) {
+  //
+  //   delaybuffers[0][delay_w_ptr[0]] = (signed long)ftemp[0][1][y];
+  //   delaybuffers[1][delay_w_ptr[1]] = (signed long)ftemp[1][1][y];
+  //   // delaybuffers[2][delay_w_ptr[2]] = (signed long)ftemp[2][1][y];
+  //   // delaybuffers[3][delay_w_ptr[3]] = (signed long)ftemp[3][1][y];
+  //
+  //   data[i] = delaybuffers[0][delay_r_ptr];
+  //   data[i + 1] = delaybuffers[1][delay_r_ptr];
+  //   delay_r_ptr++;
+  //   if (delay_r_ptr == delaysize)
+  //     delay_r_ptr = 0;
+  //
+  //   for (int z = 0; z < 4; z++) {
+  //     delay_w_ptr[z]++;
+  //     if (delay_w_ptr[z] == delaysize)
+  //       delay_w_ptr[z] = 0;
+  //   }
+  //
+  //   y++;
+  // }
 
-    for (int i = 0; i < y; i++) {
-
-      chann_abs[channel] = fabsf(ftemp[channel][1][i]);
-
-      if (chann_abs[channel] > peak_detect_temp[channel])
-        peak_detect_temp[channel] = chann_abs[channel];
-
-      if (chann_abs[channel] > limiter_threshold[channel]) {
-
-        float gainnew = limiter_threshold[channel] / chann_abs[channel];
-        limiter_timeout[channel] = settings.par_limiter_release[channel];
-
-        if (gainnew < limiter_gains[channel]) {
-          limiter_gains[channel] = gainnew;
-          limiter_release_gain[channel] =
-              (1.0f - gainnew) /
-              ((float)settings.par_limiter_release[channel] / 2);
-        }
-      }
-    }
-  }
-
-  peak_counter++;
-  if (peak_counter == 70) {
-
-    for (int i = 0; i < 4; i++) {
-      peak_detect[i] = peak_detect_temp[i];
-      peak_detect_temp[i] = 0.0f;
-    }
-
-    peak_counter = 0;
-  }
-
-  // do limiter
-
-  for (int i = 0; i < 4; i++) {
-
-    if (limiter_timeout[i] > 0) {
-
-      dsps_mulc_f32_ae32(ftemp[i][1], ftemp[i][1], y, limiter_gains[i], 1, 1);
-      limiter_timeout[i]--;
-      if (limiter_timeout[i] < settings.par_limiter_release[i] / 2)
-        limiter_gains[i] += limiter_release_gain[i];
-      // for (int x=0; x<y;x++) { ftemp[i][1][x] = ftemp[i][0][x];}
-    } else {
-      limiter_gains[i] = 1.0f;
-    }
-  }
-
-  y = 0;
-
-  for (int i = 0; i < item_size / 4; i = i + 2) {
-
-    delaybuffers[0][delay_w_ptr[0]] = (signed long)ftemp[0][1][y];
-    delaybuffers[1][delay_w_ptr[1]] = (signed long)ftemp[1][1][y];
-    delaybuffers[2][delay_w_ptr[2]] = (signed long)ftemp[2][1][y];
-    delaybuffers[3][delay_w_ptr[3]] = (signed long)ftemp[3][1][y];
-
-    data[i] = delaybuffers[0][delay_r_ptr];
-    data[i + 1] = delaybuffers[1][delay_r_ptr];
-    delay_r_ptr++;
-    if (delay_r_ptr == delaysize)
-      delay_r_ptr = 0;
-
-    for (int z = 0; z < 4; z++) {
-      delay_w_ptr[z]++;
-      if (delay_w_ptr[z] == delaysize)
-        delay_w_ptr[z] = 0;
-    }
-
-    y++;
+  for (int i = 0; i < sample_count; i++) {
+    data[i * 2] = (int16_t)(left_buf[i] * 32768.0f);
+    data[i * 2 + 1] = (int16_t)(right_buf[i] * 32768.0f);
   }
 }
 

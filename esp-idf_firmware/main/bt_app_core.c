@@ -26,35 +26,19 @@ static xTaskHandle s_aux_i2s_task_handle = NULL;
 
 // i2s helper
 size_t bytes_written = 0;
-size_t readsize = 0;
-int blocksize = 512;
+size_t bytes_read = 0;
 
-// fifo
-signed long data32b[128], data32b2[128];
-int wptr = 0, rptr = 0;
-uint64_t wptrtotal = 0, rptrtotal = 0;
-
-static int entries() { return wptrtotal - rptrtotal; }
+int16_t i2s_rx_buffer[1024];
 
 static void aux_i2s_task_handler(void *arg) {
 
   ESP_LOGI("I2S", "I2S Task started on Core %d", xPortGetCoreID());
 
-  for (int i = 0; i < 128; i++) {
-    data32b[i] = 0;
-  }
-
   while (1) {
-    wptr = 0;
-    rptr = 0;
-    wptrtotal = 0;
-    rptrtotal = 0;
-
-    i2s_read(0, data32b, blocksize, &readsize, portMAX_DELAY);
-
-    DoDSP(data32b, blocksize, 1.0f);
-
-    i2s_write(1, data32b, readsize, &bytes_written, portMAX_DELAY);
+    i2s_read(0, i2s_rx_buffer, sizeof(i2s_rx_buffer), &bytes_read,
+             portMAX_DELAY);
+    DoDSP(i2s_rx_buffer, bytes_read, 1.0f);
+    i2s_write(1, i2s_rx_buffer, bytes_read, &bytes_written, portMAX_DELAY);
   }
 }
 

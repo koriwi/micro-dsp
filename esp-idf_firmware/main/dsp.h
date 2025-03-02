@@ -21,7 +21,7 @@ typedef struct {
 } dspsettings;
 
 dspsettings settings;
-void DoDSP(signed long *data, size_t size, float rampupgain);
+void DoDSP(int16_t *data, size_t size, float rampupgain);
 void initDSPParameters();
 void PrintParameters();
 void initDSPFilters(float fsin);

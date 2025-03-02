@@ -77,8 +77,8 @@ void initAudioAuxMode() {
       .bits_per_sample = 16,
       .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT, // 2-channels
       .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-      .dma_buf_count = 16,
-      .dma_buf_len = 128,
+      .dma_buf_count = 4,
+      .dma_buf_len = 1024,
       .intr_alloc_flags = 0, // Default interrupt priority
       .tx_desc_auto_clear = false,
       .use_apll = false // Auto clear tx descriptor on underflow
@@ -92,8 +92,8 @@ void initAudioAuxMode() {
       .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT, // 2-channels
       .communication_format = I2S_COMM_FORMAT_STAND_I2S,
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1, // Interrupt level
-      .dma_buf_count = 16,
-      .dma_buf_len = 128,
+      .dma_buf_count = 4,
+      .dma_buf_len = 1024,
       .fixed_mclk = 0,
       .tx_desc_auto_clear = true,
       .use_apll = true // Auto clear tx descriptor on underflow
