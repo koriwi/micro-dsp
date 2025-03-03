@@ -28,7 +28,7 @@ static xTaskHandle s_aux_i2s_task_handle = NULL;
 size_t bytes_written = 0;
 size_t bytes_read = 0;
 
-int16_t i2s_rx_buffer[1024];
+int16_t i2s_rx_buffer[128];
 
 static void aux_i2s_task_handler(void *arg) {
 

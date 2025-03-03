@@ -81,9 +81,9 @@ float dynbass_gainspeed = 0.0f;
 
 // input buffers
 // float inputbuff[3][64];
-float left_buf[1024 / 2];
-float right_buf[1024 / 2];
-float mono_buf[1024 / 2];
+float left_buf[128 / 2];
+float right_buf[128 / 2];
+float mono_buf[128 / 2];
 float *inputbuff[2] = {left_buf, right_buf};
 
 float polate(float ins, float *delay) {
